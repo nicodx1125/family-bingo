@@ -19,6 +19,9 @@ export function useBingo() {
     const [isRolling, setIsRolling] = useState(false);
     const [isManualClimax, setIsManualClimax] = useState(false);
 
+    // 設定: クライマックス発動条件（残り枚数がこの値以下で発動）
+    const [climaxTriggerRemaining, setClimaxTriggerRemaining] = useState<number>(40);
+
     // Initialize on mount to avoid hydration mismatch
     useEffect(() => {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -28,6 +31,9 @@ export function useBingo() {
                 setHistory(parsed.history || []);
                 setCurrentNumber(parsed.currentNumber || null);
                 setIsManualClimax(parsed.isManualClimax || false);
+                if (parsed.climaxTriggerRemaining !== undefined) {
+                    setClimaxTriggerRemaining(parsed.climaxTriggerRemaining);
+                }
             } catch (e) {
                 console.error('Failed to load bingo state', e);
             }
@@ -36,10 +42,19 @@ export function useBingo() {
 
     // Persist transitions
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, currentNumber, isManualClimax }));
-    }, [history, currentNumber, isManualClimax]);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            history,
+            currentNumber,
+            isManualClimax,
+            climaxTriggerRemaining
+        }));
+    }, [history, currentNumber, isManualClimax, climaxTriggerRemaining]);
 
-    const gamePhase: 'normal' | 'climax' = (history.length >= 35 || isManualClimax) ? 'climax' : 'normal';
+    // 残り枚数を計算
+    const remainingCount = 75 - history.length;
+
+    // クライマックスモードの判定（残り枚数が設定値以下 または 手動発動）
+    const gamePhase: 'normal' | 'climax' = (remainingCount <= climaxTriggerRemaining || isManualClimax) ? 'climax' : 'normal';
 
     const toggleManualClimax = useCallback(() => {
         setIsManualClimax(prev => !prev);
@@ -77,7 +92,7 @@ export function useBingo() {
         setCurrentNumber(null);
         setIsRolling(false);
         setIsManualClimax(false);
-        localStorage.removeItem(STORAGE_KEY);
+        // 設定はリセットしない
     }, []);
 
     return {
@@ -90,6 +105,10 @@ export function useBingo() {
         addToHistory,
         resetGame,
         toggleManualClimax,
-        isManualClimax
+        isManualClimax,
+        remainingCount,
+        climaxTriggerRemaining,
+        setClimaxTriggerRemaining
     };
 }
+

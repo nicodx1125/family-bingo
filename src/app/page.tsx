@@ -5,9 +5,11 @@ import { useBingo } from '@/hooks/useBingo';
 import { BingoRoller } from '@/components/BingoRoller';
 import { BingoGrid } from '@/components/BingoGrid';
 import { ResetModal } from '@/components/ResetModal';
+import { SettingsModal } from '@/components/SettingsModal';
 import { getBingoAudio } from '@/utils/audio';
 import confetti from 'canvas-confetti';
 import { useState, useEffect, useCallback } from 'react';
+import { Settings as SettingsIcon, PanelRightClose, PanelRightOpen } from 'lucide-react';
 
 export default function Home() {
     const {
@@ -20,15 +22,22 @@ export default function Home() {
         drawNumber,
         addToHistory,
         resetGame,
-        toggleManualClimax
+        toggleManualClimax,
+        remainingCount,
+        climaxTriggerRemaining,
+        setClimaxTriggerRemaining
     } = useBingo();
 
     // Local state to track if we are in the "reveal animation" phase (pachinko or normal)
     // When true, we do NOT show the current number in the grid yet (delayed commit).
     const [isRevealingResult, setIsRevealingResult] = useState(false);
 
-    // Reset Modal State
+    // Modal States
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Layout State
+    const [isGridVisible, setIsGridVisible] = useState(true);
 
     const handleStop = useCallback(() => {
         // Only draw the number internally (stops rolling logic) but don't add to history
@@ -56,7 +65,7 @@ export default function Home() {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.code === 'Space') {
                 e.preventDefault(); // Prevent scrolling
-                if (isResetModalOpen || isRevealingResult) return;
+                if (isResetModalOpen || isSettingsOpen || isRevealingResult) return;
 
                 if (isRolling) {
                     handleStop();
@@ -69,7 +78,7 @@ export default function Home() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isResetModalOpen, isRevealingResult, isRolling, startRoll, handleStop]);
+    }, [isResetModalOpen, isSettingsOpen, isRevealingResult, isRolling, startRoll, handleStop]);
 
     const handleRevealComplete = () => {
         // Triggered after visual reveal (immediate or delayed 3s + 0.5s pause)
@@ -84,10 +93,12 @@ export default function Home() {
 
             // Confetti Effect
             const scalar = gamePhase === 'climax' ? 1.5 : 1.0;
+            // Center if full screen, left-ish if grid is visible
+            const originX = isGridVisible ? 0.3 : 0.5;
             confetti({
                 particleCount: 100 * scalar,
                 spread: 70,
-                origin: { x: 0.3, y: 0.6 }, // Left side origin
+                origin: { x: originX, y: 0.6 },
                 colors: gamePhase === 'climax' ? ['#ff0000', '#ffa500', '#ffffff'] : undefined
             });
         }
@@ -110,9 +121,40 @@ export default function Home() {
                 onClose={() => setIsResetModalOpen(false)}
                 onConfirm={confirmReset}
             />
+            <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                climaxTriggerRemaining={climaxTriggerRemaining}
+                setClimaxTriggerRemaining={setClimaxTriggerRemaining}
+            />
 
-            {/* Left Panel: Roller (55%) */}
-            <section className="h-[40vh] md:h-full md:w-[55%] flex-shrink-0 relative z-10 shadow-2xl">
+            {/* Left Panel: Roller */}
+            <section className={`h-[40vh] md:h-full flex-shrink-0 relative z-10 shadow-2xl transition-all duration-500 ease-in-out ${isGridVisible ? 'md:w-[55%]' : 'w-full'
+                }`}>
+                {/* Top Right Controls Overlay */}
+                <div className="absolute top-4 right-4 z-20 flex items-center gap-4">
+                    <div className="bg-black/20 backdrop-blur-sm text-white px-4 py-2 rounded-full font-bold">
+                        残り {remainingCount} 枚
+                    </div>
+
+                    {/* Grid Toggle Button */}
+                    <button
+                        onClick={() => setIsGridVisible(prev => !prev)}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full text-white transition-all shadow-lg"
+                        title={isGridVisible ? "一覧を隠す" : "一覧を表示"}
+                    >
+                        {isGridVisible ? <PanelRightClose size={24} /> : <PanelRightOpen size={24} />}
+                    </button>
+
+                    <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full text-white transition-all shadow-lg"
+                        title="設定"
+                    >
+                        <SettingsIcon size={24} />
+                    </button>
+                </div>
+
                 <BingoRoller
                     currentNumber={currentNumber}
                     isRolling={isRolling}
@@ -126,15 +168,20 @@ export default function Home() {
                 />
             </section>
 
-            {/* Right Panel: Grid (45%) */}
-            <section className="flex-1 h-full overflow-hidden bg-gray-50">
+            {/* Right Panel: Grid */}
+            <div
+                className={`flex-1 h-full overflow-hidden bg-gray-50 transition-all duration-500 ease-in-out ${isGridVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-full absolute right-0 w-0'
+                    }`}
+                style={{ display: isGridVisible ? 'block' : 'none' }} // Ensure it's removed from flow/layout when hidden for proper Roller expansion
+            >
                 <BingoGrid
                     history={history}
                     // Pass null if revealing, so the grid doesn't light up the new number yet
                     currentNumber={isRevealingResult ? null : currentNumber}
                     gamePhase={gamePhase}
                 />
-            </section>
+            </div>
         </main>
     );
 }
+
