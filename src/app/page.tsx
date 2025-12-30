@@ -1,65 +1,131 @@
-import Image from "next/image";
+// app/page.tsx
+'use client';
+
+import { useBingo } from '@/hooks/useBingo';
+import { BingoRoller } from '@/components/BingoRoller';
+import { BingoGrid } from '@/components/BingoGrid';
+import { ResetModal } from '@/components/ResetModal';
+import { getBingoAudio } from '@/utils/audio';
+import confetti from 'canvas-confetti';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    const {
+        history,
+        currentNumber,
+        isRolling,
+        gamePhase,
+        isManualClimax,
+        startRoll,
+        drawNumber,
+        addToHistory,
+        resetGame,
+        toggleManualClimax
+    } = useBingo();
+
+    // Local state to track if we are in the "reveal animation" phase (pachinko or normal)
+    // When true, we do NOT show the current number in the grid yet (delayed commit).
+    const [isRevealingResult, setIsRevealingResult] = useState(false);
+
+    // Reset Modal State
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+
+    const handleStop = () => {
+        // Only draw the number internally (stops rolling logic) but don't add to history
+        drawNumber();
+        // Start visual reveal phase
+        setIsRevealingResult(true);
+        // Visual effects (animation) are handled by BingoRoller, which will call onRevealComplete
+    };
+
+    // Spacebar Support
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Prevent scrolling
+                if (isResetModalOpen || isRevealingResult) return;
+
+                if (isRolling) {
+                    handleStop();
+                } else {
+                    // Start rolling if we are not currently rolling
+                    startRoll();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isResetModalOpen, isRevealingResult, isRolling, startRoll]); // handleStop is defined inside, so pass deps carefully or move it out. 
+    // handleStop depends on drawNumber, setIsRevealingResult. drawNumber is stable (ref from hook? useBingo uses useCallback).
+    // Actually handleStop changes on every render because it's defined inside component without useCallback.
+    // Better to just call logic directly or wrap handleStop in useCallback.
+    // Let's wrap handleStop in useCallback or just use it as dependency (might trigger effect re-binds but fine).
+
+    const handleRevealComplete = () => {
+        // Triggered after visual reveal (immediate or delayed 3s + 0.5s pause)
+        if (currentNumber) {
+            // Commit to history now
+            addToHistory(currentNumber);
+            // End reveal phase -> triggers Grid update
+            setIsRevealingResult(false);
+
+            // Audio Effect
+            getBingoAudio().playDecision(gamePhase === 'climax');
+
+            // Confetti Effect
+            const scalar = gamePhase === 'climax' ? 1.5 : 1.0;
+            confetti({
+                particleCount: 100 * scalar,
+                spread: 70,
+                origin: { x: 0.3, y: 0.6 }, // Left side origin
+                colors: gamePhase === 'climax' ? ['#ff0000', '#ffa500', '#ffffff'] : undefined
+            });
+        }
+    };
+
+    const handleResetClick = () => {
+        setIsResetModalOpen(true);
+    };
+
+    const confirmReset = () => {
+        setIsRevealingResult(false);
+        resetGame();
+        setIsResetModalOpen(false);
+    };
+
+    return (
+        <main className="flex flex-col md:flex-row h-screen overflow-hidden">
+            <ResetModal
+                isOpen={isResetModalOpen}
+                onClose={() => setIsResetModalOpen(false)}
+                onConfirm={confirmReset}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+
+            {/* Left Panel: Roller (55%) */}
+            <section className="h-[40vh] md:h-full md:w-[55%] flex-shrink-0 relative z-10 shadow-2xl">
+                <BingoRoller
+                    currentNumber={currentNumber}
+                    isRolling={isRolling}
+                    gamePhase={gamePhase}
+                    isManualClimax={isManualClimax}
+                    onStart={startRoll}
+                    onStop={handleStop}
+                    onReset={handleResetClick}
+                    onToggleClimax={toggleManualClimax}
+                    onRevealComplete={handleRevealComplete}
+                />
+            </section>
+
+            {/* Right Panel: Grid (45%) */}
+            <section className="flex-1 h-full overflow-hidden bg-gray-50">
+                <BingoGrid
+                    history={history}
+                    // Pass null if revealing, so the grid doesn't light up the new number yet
+                    currentNumber={isRevealingResult ? null : currentNumber}
+                    gamePhase={gamePhase}
+                />
+            </section>
+        </main>
+    );
 }
