@@ -17,8 +17,6 @@ interface BingoRollerProps {
     onRevealComplete: () => void;
 }
 
-type AnimationType = 'pachinko' | 'flash' | 'drum' | 'countdown' | 'slide';
-
 export function BingoRoller({
     currentNumber,
     isRolling,
@@ -32,16 +30,9 @@ export function BingoRoller({
 }: BingoRollerProps) {
     const [displayNum, setDisplayNum] = useState<number | string>('Start');
     const [isRevealing, setIsRevealing] = useState(false);
-    // Explicit state for 'countdown' animation text (e.g. 3... 2... 1...)
-    const [overrideText, setOverrideText] = useState<string | null>(null);
 
     const frameRef = useRef<number>(0);
     const audio = getBingoAudio();
-
-    // Reset override text when rolling starts
-    useEffect(() => {
-        if (isRolling) setOverrideText(null);
-    }, [isRolling]);
 
     // Animation Loop
     useEffect(() => {
@@ -60,119 +51,23 @@ export function BingoRoller({
             // STOPPED with a number
             if (currentNumber !== null) {
                 if (gamePhase === 'climax') {
-                    // Start Random Climax Animation
+                    // Start Climax Animation (Pachinko Style Only)
                     if (!isRevealing) {
                         setIsRevealing(true);
-
-                        // Select Random Animation
-                        const animations: AnimationType[] = ['pachinko', 'flash', 'drum', 'countdown', 'slide'];
-                        const selectedAnim = animations[Math.floor(Math.random() * animations.length)];
 
                         // Use a ref to track if component unmounted or reset during async
                         const isActive = { current: true };
 
-                        if (selectedAnim === 'pachinko') {
-                            // --- PACHINKO (Decelerate) ---
-                            audio.playHeartbeat();
-                            let speed = 50;
-                            let totalTime = 0;
-                            const maxTime = 3000;
+                        // --- PACHINKO (Decelerate) ---
+                        audio.playHeartbeat();
+                        let speed = 50;
+                        let totalTime = 0;
+                        const maxTime = 3000;
 
-                            const slowRoll = () => {
-                                if (!isActive.current) return;
-                                setDisplayNum(Math.floor(Math.random() * 75) + 1);
-                                speed *= 1.1;
-                                totalTime += speed;
-                                if (totalTime < maxTime) {
-                                    frameRef.current = window.setTimeout(slowRoll, speed);
-                                } else {
-                                    finalizeReveal();
-                                }
-                            };
-                            slowRoll();
-
-                        } else if (selectedAnim === 'flash') {
-                            // --- FLASH (Blink) ---
-                            // 2 seconds of high speed random + blinking? 
-                            // Or just silence then FLASH.
-                            // Let's do: Rapid random numbers (standard roll sound stopped), then 
-                            // 1 second of "Darkness" (Heartbeat), then Reveal.
-
-                            // Immediately stop showing numbers for a moment (Blackout)
-                            setDisplayNum('');
-                            audio.playHeartbeat();
-
-                            // Wait 1.5s
-                            frameRef.current = window.setTimeout(() => {
-                                if (!isActive.current) return;
-                                finalizeReveal();
-                            }, 1500);
-
-                        } else if (selectedAnim === 'drum') {
-                            // --- DRUM ROLL (Classic Tension) ---
-                            // Continue "rolling" manually for fixed time, then sudden stop.
-                            const drum = () => {
-                                if (!isActive.current) return;
-                                setDisplayNum(Math.floor(Math.random() * 75) + 1);
-                                frameRef.current = requestAnimationFrame(drum);
-                            };
-                            drum();
-
-                            // Stop after 2 seconds
-                            setTimeout(() => {
-                                if (!isActive.current) return;
-                                if (frameRef.current) cancelAnimationFrame(frameRef.current);
-                                finalizeReveal();
-                            }, 2000);
-
-                        } else if (selectedAnim === 'countdown') {
-                            // --- COUNTDOWN (3..2..1) ---
-                            let count = 3;
-                            setOverrideText(String(count));
-                            // Use heartbeat for ticks
-                            audio.playHeartbeat();
-
-                            const tick = () => {
-                                if (!isActive.current) return;
-                                if (count > 0) {
-                                    setOverrideText(String(count));
-                                    count--;
-                                    frameRef.current = window.setTimeout(tick, 800);
-                                } else {
-                                    setOverrideText(null); // Show real number
-                                    finalizeReveal();
-                                }
-                            };
-                            // Start tick
-                            frameRef.current = window.setTimeout(tick, 800);
-
-                        } else if (selectedAnim === 'slide') {
-                            // --- SLIDE (Simulated Slot Machine / Slide in) ---
-                            // Logic: Show random numbers slower and slower (linear)
-                            let speed = 20;
-                            let count = 0;
-                            const maxCount = 40; // 40 steps
-
-                            const slidin = () => {
-                                if (!isActive.current) return;
-                                setDisplayNum(Math.floor(Math.random() * 75) + 1);
-                                count++;
-                                speed += 2; // Linear slow down
-                                if (count < maxCount) {
-                                    frameRef.current = window.setTimeout(slidin, speed);
-                                } else {
-                                    finalizeReveal();
-                                }
-                            };
-                            slidin();
-                        }
-
-                        // Helper to finish up
                         const finalizeReveal = () => {
                             if (!isActive.current) return;
                             audio.stopHeartbeat();
                             setDisplayNum(currentNumber);
-                            setOverrideText(null);
 
                             // Dramatic pause (0.5s)
                             frameRef.current = window.setTimeout(() => {
@@ -181,6 +76,19 @@ export function BingoRoller({
                                 onRevealComplete();
                             }, 500);
                         };
+
+                        const slowRoll = () => {
+                            if (!isActive.current) return;
+                            setDisplayNum(Math.floor(Math.random() * 75) + 1);
+                            speed *= 1.1;
+                            totalTime += speed;
+                            if (totalTime < maxTime) {
+                                frameRef.current = window.setTimeout(slowRoll, speed);
+                            } else {
+                                finalizeReveal();
+                            }
+                        };
+                        slowRoll();
 
                         // Cleanup for this specific run
                         return () => {
@@ -199,7 +107,6 @@ export function BingoRoller({
             } else {
                 // RESET STATE
                 setDisplayNum('Start');
-                setOverrideText(null);
                 setIsRevealing(false);
                 audio.stopHeartbeat();
             }
@@ -234,7 +141,7 @@ export function BingoRoller({
         ${gamePhase === 'climax' ? 'border-red-500 text-red-600' : 'border-blue-500 text-blue-600'}
         ${isRevealing ? 'animate-pulse' : ''}
       `}>
-                {overrideText || displayNum}
+                {displayNum}
             </div>
 
             {/* Controls */}
