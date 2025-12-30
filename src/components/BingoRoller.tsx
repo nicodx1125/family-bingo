@@ -58,30 +58,48 @@ export function BingoRoller({
                         // Use a ref to track if component unmounted or reset during async
                         const isActive = { current: true };
 
-                        // --- PACHINKO (Decelerate) ---
+                        // --- PACHINKO (Decelerate w/ SLIP) ---
                         audio.playHeartbeat();
                         let speed = 50;
                         let totalTime = 0;
                         const maxTime = 3000;
 
+                        // Calculate Fake Number (Neighbor)
+                        // Try +1, if >75 then -1.
+                        const fakeNumber = currentNumber >= 75 ? currentNumber - 1 : currentNumber + 1;
+
                         const finalizeReveal = () => {
                             if (!isActive.current) return;
-                            audio.stopHeartbeat();
-                            setDisplayNum(currentNumber);
 
-                            // Dramatic pause (0.5s)
+                            // 1. Stop on Fake Number
+                            setDisplayNum(fakeNumber);
+
+                            // 2. Suspense Pause (Audience thinks it's missed/done)
                             frameRef.current = window.setTimeout(() => {
                                 if (!isActive.current) return;
-                                setIsRevealing(false);
-                                onRevealComplete();
-                            }, 500);
+
+                                // 3. The SLIP (Jump to real number)
+                                setDisplayNum(currentNumber);
+                                audio.stopHeartbeat(); // Stop Heartbeat on the real reveal
+
+                                // 4. Final short pause before Fanfare
+                                frameRef.current = window.setTimeout(() => {
+                                    if (!isActive.current) return;
+                                    setIsRevealing(false);
+                                    onRevealComplete();
+                                }, 300); // 0.3s pause after slip
+
+                            }, 800); // 0.8s pause on fake number
                         };
 
                         const slowRoll = () => {
                             if (!isActive.current) return;
+                            // Random numbers during roll
                             setDisplayNum(Math.floor(Math.random() * 75) + 1);
+
                             speed *= 1.1;
                             totalTime += speed;
+
                             if (totalTime < maxTime) {
                                 frameRef.current = window.setTimeout(slowRoll, speed);
                             } else {
