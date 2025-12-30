@@ -7,7 +7,7 @@ import { BingoGrid } from '@/components/BingoGrid';
 import { ResetModal } from '@/components/ResetModal';
 import { getBingoAudio } from '@/utils/audio';
 import confetti from 'canvas-confetti';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export default function Home() {
     const {
@@ -30,13 +30,26 @@ export default function Home() {
     // Reset Modal State
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
-    const handleStop = () => {
+    const handleStop = useCallback(() => {
         // Only draw the number internally (stops rolling logic) but don't add to history
         drawNumber();
         // Start visual reveal phase
         setIsRevealingResult(true);
         // Visual effects (animation) are handled by BingoRoller, which will call onRevealComplete
-    };
+    }, [drawNumber]);
+
+    // Auto-stop effect (3 seconds)
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (isRolling && !isRevealingResult) {
+            timer = setTimeout(() => {
+                handleStop();
+            }, 3000);
+        }
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [isRolling, isRevealingResult, handleStop]);
 
     // Spacebar Support
     useEffect(() => {
@@ -56,11 +69,7 @@ export default function Home() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isResetModalOpen, isRevealingResult, isRolling, startRoll]); // handleStop is defined inside, so pass deps carefully or move it out. 
-    // handleStop depends on drawNumber, setIsRevealingResult. drawNumber is stable (ref from hook? useBingo uses useCallback).
-    // Actually handleStop changes on every render because it's defined inside component without useCallback.
-    // Better to just call logic directly or wrap handleStop in useCallback.
-    // Let's wrap handleStop in useCallback or just use it as dependency (might trigger effect re-binds but fine).
+    }, [isResetModalOpen, isRevealingResult, isRolling, startRoll, handleStop]);
 
     const handleRevealComplete = () => {
         // Triggered after visual reveal (immediate or delayed 3s + 0.5s pause)
