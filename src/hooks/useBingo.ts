@@ -39,7 +39,7 @@ export function useBingo() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, currentNumber, isManualClimax }));
     }, [history, currentNumber, isManualClimax]);
 
-    const gamePhase = (history.length >= 35 || isManualClimax) ? 'climax' : 'normal';
+    const gamePhase: 'normal' | 'climax' = (history.length >= 35 || isManualClimax) ? 'climax' : 'normal';
 
     const toggleManualClimax = useCallback(() => {
         setIsManualClimax(prev => !prev);
